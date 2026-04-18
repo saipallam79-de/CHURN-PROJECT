@@ -1,48 +1,71 @@
 import streamlit as st
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
-import boto3
+import matplotlib.pyplot as plt
 
 # -----------------------------
-# 🎥 VIDEO BACKGROUND + UI STYLE
+# 🎨 UI STYLE
 # -----------------------------
+st.set_page_config(page_title="Customer Churn Prediction", layout="wide")
+
 st.markdown("""
-<video autoplay muted loop id="bg-video">
-  <source src="https://www.w3schools.com/howto/rain.mp4" type="video/mp4">
-</video>
-
 <style>
-#bg-video {
-  position: fixed;
-  right: 0;
-  bottom: 0;
-  min-width: 100%;
-  min-height: 100%;
-  z-index: -1;
-}
 
+/* 🌌 Background */
 .stApp {
-    color: white;
+    background: linear-gradient(-45deg, #141e30, #243b55, #1d2671, #c33764);
+    background-size: 400% 400%;
+    animation: gradientBG 10s ease infinite;
 }
 
+/* Animation */
+@keyframes gradientBG {
+    0% {background-position: 0% 50%;}
+    50% {background-position: 100% 50%;}
+    100% {background-position: 0% 50%;}
+}
+
+/* Center container */
+.center-box {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 80vh;
+}
+
+/* Title */
+.title {
+    color: white;
+    font-size: 48px;
+    margin-bottom: 40px;
+}
+
+/* Buttons */
 div.stButton > button {
-    background: linear-gradient(45deg, #00c6ff, #0072ff);
-    color: white;
+    width: 300px;
+    height: 70px;
     font-size: 20px;
-    padding: 15px 30px;
+    font-weight: bold;
     border-radius: 15px;
-    transition: 0.3s;
+    border: none;
+    color: white;
+    background: linear-gradient(135deg, #00c6ff, #0072ff);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+    transition: all 0.3s ease;
 }
 
+/* Hover */
 div.stButton > button:hover {
-    transform: scale(1.1);
-    background: linear-gradient(45deg, #ff512f, #dd2476);
+    transform: scale(1.08);
+    background: linear-gradient(135deg, #ff512f, #dd2476);
 }
+
 </style>
 """, unsafe_allow_html=True)
 
 # -----------------------------
-# LOAD DATA + TRAIN MODEL
+# LOAD MODEL
 # -----------------------------
 df = pd.read_csv("telecom_churn.csv")
 X = df.drop('Churn', axis=1)
@@ -52,8 +75,17 @@ model = LogisticRegression(max_iter=1000)
 model.fit(X, y)
 
 # -----------------------------
-# SESSION NAVIGATION
+# NAVIGATION FUNCTIONS
 # -----------------------------
+def go_home():
+    st.session_state.page = "home"
+
+def go_single():
+    st.session_state.page = "single"
+
+def go_csv():
+    st.session_state.page = "csv"
+
 if "page" not in st.session_state:
     st.session_state.page = "home"
 
@@ -62,27 +94,24 @@ if "page" not in st.session_state:
 # =============================
 if st.session_state.page == "home":
 
-    st.title("🚀 AI Customer Churn System")
+    st.markdown('<div class="center-box">', unsafe_allow_html=True)
 
-    col1, col2 = st.columns(2)
+    st.markdown('<div class="title">🚀 Customer Churn Prediction</div>', unsafe_allow_html=True)
 
-    with col1:
-        if st.button("🧍 Single Customer"):
-            st.session_state.page = "single"
+    st.button("🧍 Single Customer", on_click=go_single)
+    st.write("")  # spacing
+    st.button("📂 Upload CSV", on_click=go_csv)
 
-    with col2:
-        if st.button("📂 CSV Upload"):
-            st.session_state.page = "csv"
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # =============================
-# 🧍 SINGLE CUSTOMER PAGE
+# 🧍 SINGLE CUSTOMER
 # =============================
 elif st.session_state.page == "single":
 
-    if st.button("⬅ Back"):
-        st.session_state.page = "home"
+    st.button("⬅ Back", on_click=go_home)
 
-    st.header("🧍 Single Customer Prediction")
+    st.header("Single Customer Prediction")
 
     AccountWeeks = st.number_input("AccountWeeks")
     ContractRenewal = st.number_input("ContractRenewal (0/1)")
@@ -106,33 +135,18 @@ elif st.session_state.page == "single":
         pred = model.predict(data)
 
         if pred[0] == 1:
-            result = "LEAVE"
             st.error("⚠️ Customer will LEAVE")
         else:
-            result = "STAY"
             st.success("✅ Customer will STAY")
 
-        # Save to S3
-        try:
-            s3 = boto3.client('s3')
-            s3.put_object(
-                Bucket='sai-first-bucket-76800',
-                Key='results/single_output.txt',
-                Body=str(data) + " -> " + result
-            )
-            st.info("Saved to AWS S3 ✅")
-        except Exception as e:
-            st.warning(f"S3 Error: {e}")
-
 # =============================
-# 📂 CSV UPLOAD PAGE
+# 📂 CSV UPLOAD
 # =============================
 elif st.session_state.page == "csv":
 
-    if st.button("⬅ Back"):
-        st.session_state.page = "home"
+    st.button("⬅ Back", on_click=go_home)
 
-    st.header("📂 Bulk Prediction")
+    st.header("Bulk Prediction")
 
     uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
 
@@ -147,7 +161,9 @@ elif st.session_state.page == "csv":
 
         st.dataframe(df_upload.head())
 
-        if all(col in df_upload.columns for col in required_columns):
+        missing = [col for col in required_columns if col not in df_upload.columns]
+
+        if len(missing) == 0:
 
             data = df_upload[required_columns]
             predictions = model.predict(data)
@@ -157,40 +173,21 @@ elif st.session_state.page == "csv":
                 1: "LEAVE"
             })
 
-            st.success("✅ Prediction completed")
+            st.success("Prediction completed")
 
-            # Show all
-            st.subheader("📊 Results")
             st.dataframe(df_upload)
 
-            # Separate
-            stay_df = df_upload[df_upload['Prediction'] == "STAY"]
-            leave_df = df_upload[df_upload['Prediction'] == "LEAVE"]
+            # Charts
+            st.subheader("Churn Analysis")
 
-            st.subheader("🟢 Staying Customers")
-            st.success(f"{len(stay_df)} Customers")
-            st.dataframe(stay_df)
+            counts = df_upload['Prediction'].value_counts()
 
-            st.subheader("🔴 Leaving Customers")
-            st.error(f"{len(leave_df)} Customers")
-            st.dataframe(leave_df)
+            fig, ax = plt.subplots()
+            ax.pie(counts, labels=counts.index, autopct='%1.1f%%')
+            st.pyplot(fig)
 
-            # Download
-            csv = df_upload.to_csv(index=False)
-            st.download_button("Download Results", csv, "output.csv")
-
-            # Save to S3
-            try:
-                s3 = boto3.client('s3')
-                s3.put_object(
-                    Bucket='sai-first-bucket-76800',
-                    Key='results/bulk_output.csv',
-                    Body=csv
-                )
-                st.info("Saved to AWS S3 ✅")
-            except Exception as e:
-                st.warning(f"S3 Error: {e}")
+            st.bar_chart(counts)
 
         else:
-            st.error("❌ Invalid CSV format")
-            st.write("Required columns:", required_columns)
+            st.error("Invalid CSV format")
+            st.write("Missing columns:", missing)
