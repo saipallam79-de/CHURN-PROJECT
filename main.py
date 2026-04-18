@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 import boto3
+import matplotlib.pyplot as plt
 
 # -----------------------------
-# 🎥 VIDEO BACKGROUND + UI STYLE
+# 🎥 VIDEO BACKGROUND + STYLE
 # -----------------------------
 st.markdown("""
 <video autoplay muted loop id="bg-video">
@@ -28,9 +29,9 @@ st.markdown("""
 div.stButton > button {
     background: linear-gradient(45deg, #00c6ff, #0072ff);
     color: white;
-    font-size: 20px;
-    padding: 15px 30px;
-    border-radius: 15px;
+    font-size: 18px;
+    padding: 12px 25px;
+    border-radius: 12px;
     transition: 0.3s;
 }
 
@@ -42,9 +43,10 @@ div.stButton > button:hover {
 """, unsafe_allow_html=True)
 
 # -----------------------------
-# LOAD DATA + TRAIN MODEL
+# LOAD DATA + MODEL
 # -----------------------------
 df = pd.read_csv("telecom_churn.csv")
+
 X = df.drop('Churn', axis=1)
 y = df['Churn']
 
@@ -52,13 +54,13 @@ model = LogisticRegression(max_iter=1000)
 model.fit(X, y)
 
 # -----------------------------
-# SESSION NAVIGATION
+# NAVIGATION
 # -----------------------------
 if "page" not in st.session_state:
     st.session_state.page = "home"
 
 # =============================
-# 🏠 HOME PAGE
+# 🏠 HOME
 # =============================
 if st.session_state.page == "home":
 
@@ -75,7 +77,7 @@ if st.session_state.page == "home":
             st.session_state.page = "csv"
 
 # =============================
-# 🧍 SINGLE CUSTOMER PAGE
+# 🧍 SINGLE CUSTOMER
 # =============================
 elif st.session_state.page == "single":
 
@@ -112,7 +114,7 @@ elif st.session_state.page == "single":
             result = "STAY"
             st.success("✅ Customer will STAY")
 
-        # Save to S3
+        # AWS Save
         try:
             s3 = boto3.client('s3')
             s3.put_object(
@@ -120,12 +122,11 @@ elif st.session_state.page == "single":
                 Key='results/single_output.txt',
                 Body=str(data) + " -> " + result
             )
-            st.info("Saved to AWS S3 ✅")
-        except Exception as e:
-            st.warning(f"S3 Error: {e}")
+        except:
+            pass
 
 # =============================
-# 📂 CSV UPLOAD PAGE
+# 📂 CSV UPLOAD
 # =============================
 elif st.session_state.page == "csv":
 
@@ -147,7 +148,9 @@ elif st.session_state.page == "csv":
 
         st.dataframe(df_upload.head())
 
-        if all(col in df_upload.columns for col in required_columns):
+        missing = [col for col in required_columns if col not in df_upload.columns]
+
+        if len(missing) == 0:
 
             data = df_upload[required_columns]
             predictions = model.predict(data)
@@ -159,7 +162,7 @@ elif st.session_state.page == "csv":
 
             st.success("✅ Prediction completed")
 
-            # Show all
+            # Show results
             st.subheader("📊 Results")
             st.dataframe(df_upload)
 
@@ -175,11 +178,23 @@ elif st.session_state.page == "csv":
             st.error(f"{len(leave_df)} Customers")
             st.dataframe(leave_df)
 
+            # 📊 PIE CHART
+            st.subheader("📊 Churn Analysis")
+            counts = df_upload['Prediction'].value_counts()
+
+            fig, ax = plt.subplots()
+            ax.pie(counts, labels=counts.index, autopct='%1.1f%%')
+            st.pyplot(fig)
+
+            # 📈 BAR CHART
+            st.subheader("📈 Prediction Count")
+            st.bar_chart(counts)
+
             # Download
             csv = df_upload.to_csv(index=False)
             st.download_button("Download Results", csv, "output.csv")
 
-            # Save to S3
+            # AWS Save
             try:
                 s3 = boto3.client('s3')
                 s3.put_object(
@@ -187,10 +202,9 @@ elif st.session_state.page == "csv":
                     Key='results/bulk_output.csv',
                     Body=csv
                 )
-                st.info("Saved to AWS S3 ✅")
-            except Exception as e:
-                st.warning(f"S3 Error: {e}")
+            except:
+                pass
 
         else:
             st.error("❌ Invalid CSV format")
-            st.write("Required columns:", required_columns)
+            st.write("Missing columns:", missing)
