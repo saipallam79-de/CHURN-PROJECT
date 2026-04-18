@@ -2,85 +2,49 @@ import streamlit as st
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 import boto3
-import matplotlib.pyplot as plt
 
 # -----------------------------
-# 🎥 PREMIUM UI (VIDEO + GLASS)
+# 🎥 VIDEO BACKGROUND + UI STYLE
 # -----------------------------
 st.markdown("""
-<style>
-
-/* VIDEO BACKGROUND */
-#bg-video {
-    position: fixed;
-    right: 0;
-    bottom: 0;
-    min-width: 100%;
-    min-height: 100%;
-    z-index: -1;
-    object-fit: cover;
-}
-
-/* DARK OVERLAY */
-.overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.6);
-    z-index: -1;
-}
-
-/* GLASS CARD */
-.card {
-    backdrop-filter: blur(15px);
-    background: rgba(255,255,255,0.1);
-    padding: 30px;
-    border-radius: 20px;
-    text-align: center;
-    margin-top: 50px;
-}
-
-/* BUTTON STYLE */
-div.stButton > button {
-    width: 100%;
-    height: 80px;
-    font-size: 20px;
-    font-weight: bold;
-    border-radius: 20px;
-    background: linear-gradient(135deg, #00c6ff, #0072ff);
-    color: white;
-    border: none;
-    transition: all 0.3s ease;
-}
-
-/* HOVER */
-div.stButton > button:hover {
-    transform: scale(1.05);
-    background: linear-gradient(135deg, #ff512f, #dd2476);
-}
-
-/* TITLE */
-h1, h2, h3 {
-    text-align: center;
-    color: white;
-}
-
-</style>
-
 <video autoplay muted loop id="bg-video">
-  <source src="https://cdn.coverr.co/videos/coverr-clouds-over-mountains-1576/1080p.mp4" type="video/mp4">
+  <source src="https://www.w3schools.com/howto/rain.mp4" type="video/mp4">
 </video>
 
-<div class="overlay"></div>
+<style>
+#bg-video {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  min-width: 100%;
+  min-height: 100%;
+  z-index: -1;
+}
+
+.stApp {
+    color: white;
+}
+
+div.stButton > button {
+    background: linear-gradient(45deg, #00c6ff, #0072ff);
+    color: white;
+    font-size: 20px;
+    padding: 15px 30px;
+    border-radius: 15px;
+    transition: 0.3s;
+}
+
+div.stButton > button:hover {
+    transform: scale(1.1);
+    background: linear-gradient(45deg, #ff512f, #dd2476);
+}
+</style>
 """, unsafe_allow_html=True)
 
 # -----------------------------
-# LOAD DATA + MODEL
+# LOAD DATA + TRAIN MODEL
 # -----------------------------
 df = pd.read_csv("telecom_churn.csv")
-
 X = df.drop('Churn', axis=1)
 y = df['Churn']
 
@@ -88,7 +52,7 @@ model = LogisticRegression(max_iter=1000)
 model.fit(X, y)
 
 # -----------------------------
-# NAVIGATION STATE
+# SESSION NAVIGATION
 # -----------------------------
 if "page" not in st.session_state:
     st.session_state.page = "home"
@@ -98,9 +62,7 @@ if "page" not in st.session_state:
 # =============================
 if st.session_state.page == "home":
 
-    st.markdown("<h1>🚀 AI Customer Churn System</h1>", unsafe_allow_html=True)
-
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.title("🚀 AI Customer Churn System")
 
     col1, col2 = st.columns(2)
 
@@ -109,10 +71,8 @@ if st.session_state.page == "home":
             st.session_state.page = "single"
 
     with col2:
-        if st.button("📂 Upload Dataset"):
+        if st.button("📂 CSV Upload"):
             st.session_state.page = "csv"
-
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # =============================
 # 🧍 SINGLE CUSTOMER PAGE
@@ -160,8 +120,9 @@ elif st.session_state.page == "single":
                 Key='results/single_output.txt',
                 Body=str(data) + " -> " + result
             )
-        except:
-            pass
+            st.info("Saved to AWS S3 ✅")
+        except Exception as e:
+            st.warning(f"S3 Error: {e}")
 
 # =============================
 # 📂 CSV UPLOAD PAGE
@@ -186,9 +147,7 @@ elif st.session_state.page == "csv":
 
         st.dataframe(df_upload.head())
 
-        missing = [col for col in required_columns if col not in df_upload.columns]
-
-        if len(missing) == 0:
+        if all(col in df_upload.columns for col in required_columns):
 
             data = df_upload[required_columns]
             predictions = model.predict(data)
@@ -200,9 +159,11 @@ elif st.session_state.page == "csv":
 
             st.success("✅ Prediction completed")
 
+            # Show all
             st.subheader("📊 Results")
             st.dataframe(df_upload)
 
+            # Separate
             stay_df = df_upload[df_upload['Prediction'] == "STAY"]
             leave_df = df_upload[df_upload['Prediction'] == "LEAVE"]
 
@@ -214,23 +175,11 @@ elif st.session_state.page == "csv":
             st.error(f"{len(leave_df)} Customers")
             st.dataframe(leave_df)
 
-            # PIE CHART
-            st.subheader("📊 Churn Analysis")
-            counts = df_upload['Prediction'].value_counts()
-
-            fig, ax = plt.subplots()
-            ax.pie(counts, labels=counts.index, autopct='%1.1f%%')
-            st.pyplot(fig)
-
-            # BAR CHART
-            st.subheader("📈 Prediction Count")
-            st.bar_chart(counts)
-
-            # DOWNLOAD
+            # Download
             csv = df_upload.to_csv(index=False)
             st.download_button("Download Results", csv, "output.csv")
 
-            # AWS SAVE
+            # Save to S3
             try:
                 s3 = boto3.client('s3')
                 s3.put_object(
@@ -238,9 +187,10 @@ elif st.session_state.page == "csv":
                     Key='results/bulk_output.csv',
                     Body=csv
                 )
-            except:
-                pass
+                st.info("Saved to AWS S3 ✅")
+            except Exception as e:
+                st.warning(f"S3 Error: {e}")
 
         else:
             st.error("❌ Invalid CSV format")
-            st.write("Missing columns:", missing)
+            st.write("Required columns:", required_columns)
